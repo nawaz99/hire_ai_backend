@@ -15,13 +15,13 @@ const mammoth = require("mammoth");
 
 const app = express();
 app.use(express.json());
-// app.use(cors({ origin: "https://hire-ai-frontend-rho.vercel.app" }));
 
+// ✅ CORS setup
 app.use(
   cors({
     origin: [
-      "https://hire-ai-frontend-rho.vercel.app", // ✅ no trailing slash
-      "http://localhost:3000", // ✅ optional for local testing
+      "https://hire-ai-frontend-rho.vercel.app", // production frontend
+      "http://localhost:3000", // for local testing
     ],
     methods: ["GET", "POST", "PUT", "DELETE"],
     credentials: true,
@@ -73,7 +73,7 @@ const extractTextFromPDF = (filePath) => {
 // ✅ Helper: Analyze Resume with OpenAI
 // ==========================
 async function analyzeResumeWithAI(resumeText, jobDescription) {
-const prompt = `
+  const prompt = `
 You are an expert technical recruiter and career analyst. Your goal is to evaluate how well a candidate’s resume fits a given job description.
 
 Please analyze the following resume and job description carefully, then produce ONLY a valid JSON response (no markdown, no commentary, no code formatting).  
@@ -132,7 +132,7 @@ ${jobDescription}
   // ==========================
   // ✅ Try parsing JSON
   // ==========================
-  let resultJson;
+    let resultJson;
   try {
     resultJson = JSON.parse(cleanText);
   } catch (err) {
@@ -190,34 +190,30 @@ app.post("/api/analyze", async (req, res) => {
 // ==========================
 // ✅ ROUTE 2: Upload File + Analyze
 // ==========================
-const upload = multer({ dest: "uploads/" });
+const upload = multer({ storage: multer.memoryStorage() });
 
 app.post("/api/upload-resume", upload.single("file"), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: "No file uploaded" });
 
-    const filePath = req.file.path;
+    const buffer = req.file.buffer;
     const fileExt = req.file.originalname.split(".").pop().toLowerCase();
 
     let resumeText = "";
     if (fileExt === "pdf") {
-      resumeText = await extractTextFromPDF(filePath);
+      // ✅ Write temporarily to /tmp
+      const tempPath = `/tmp/${Date.now()}.pdf`;
+      fs.writeFileSync(tempPath, buffer);
+      resumeText = await extractTextFromPDF(tempPath);
+      fs.unlinkSync(tempPath);
     } else if (fileExt === "docx") {
-      const buffer = fs.readFileSync(filePath);
       const result = await mammoth.extractRawText({ buffer });
       resumeText = result.value;
     } else {
-      fs.unlinkSync(filePath);
       return res.status(400).json({ error: "Only PDF or DOCX supported" });
     }
 
-    fs.unlinkSync(filePath);
-
-    const result = await analyzeResumeWithAI(
-      resumeText,
-      req.body.jobDescription
-    );
-
+    const result = await analyzeResumeWithAI(resumeText, req.body.jobDescription);
     res.json(result);
   } catch (err) {
     console.error("❌ Upload Error:", err);
@@ -268,9 +264,6 @@ app.get("/api/getResults", async (req, res) => {
 });
 
 // ==========================
-// ✅ START SERVER
+// ✅ Export (for Vercel)
 // ==========================
-// app.listen(5000, () =>
-//   console.log("🚀 Server running on http://localhost:5000")
-// );
 export default app;
