@@ -20,7 +20,8 @@ app.use(express.json());
 app.use(
   cors({
     origin: [
-      "https://hire-ai-frontend-rho.vercel.app", // production frontend
+      "https://www.startogen.com",// production frontend
+      "https://hire-ai-frontend-rho.vercel.app", // alias production frontend
       "http://localhost:3000", // for local testing
     ],
     methods: ["GET", "POST", "PUT", "DELETE"],
