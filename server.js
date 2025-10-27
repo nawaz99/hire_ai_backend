@@ -15,7 +15,19 @@ const mammoth = require("mammoth");
 
 const app = express();
 app.use(express.json());
-app.use(cors({ origin: "https://hire-ai-frontend-rho.vercel.app" }));
+// app.use(cors({ origin: "https://hire-ai-frontend-rho.vercel.app" }));
+
+app.use(
+  cors({
+    origin: [
+      "https://hire-ai-frontend-rho.vercel.app", // ✅ no trailing slash
+      "http://localhost:3000", // ✅ optional for local testing
+    ],
+    methods: ["GET", "POST", "PUT", "DELETE"],
+    credentials: true,
+  })
+);
+
 
 // ==========================
 // ✅ MongoDB Connection
