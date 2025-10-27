@@ -15,7 +15,7 @@ const mammoth = require("mammoth");
 
 const app = express();
 app.use(express.json());
-app.use(cors({ origin: "https://hire-ai-frontend-rho.vercel.app/" }));
+app.use(cors({ origin: "https://hire-ai-frontend-rho.vercel.app" }));
 
 // ==========================
 // ✅ MongoDB Connection
