@@ -259,6 +259,7 @@ app.get("/api/getResults", async (req, res) => {
     res.json(results);
   } catch (error) {
     console.error("❌ Fetch Error:", error);
+    console.log(error);
     res.status(500).json({ error: "Failed to fetch results" });
   }
 });
