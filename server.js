@@ -1,271 +1,73 @@
 import express from "express";
 import dotenv from "dotenv";
 import cors from "cors";
+import cookieParser from "cookie-parser";  // ✅ Needed to read token from cookies
 import mongoose from "mongoose";
-import fetch from "node-fetch";
-import multer from "multer";
-import fs from "fs";
-import { createRequire } from "module";
-import AnalysisResult from "./models/AnalysisResult.js";
-import PDFParser from "pdf2json";
+
+// Middleware
+import auth from "./middleware/auth.js";
+
+// Routes
+import authRoutes from "./routes/auth.js";
+import userRoutes from "./routes/user.js";
+import uploadRoutes from "./routes/upload.js";
+import resultsRoutes from "./routes/results.js";
+import settingsRoutes from "./routes/settings.js";
 
 dotenv.config();
-const require = createRequire(import.meta.url);
-const mammoth = require("mammoth");
-
 const app = express();
 app.use(express.json());
+app.use(cookieParser()); // ✅ Required for HTTP-only cookie auth
 
-// ✅ CORS setup
+// ✅ CORS setup (must allow credentials)
 app.use(
   cors({
     origin: [
-      "https://www.startogen.com",// production frontend
-      "https://hire-ai-frontend-rho.vercel.app", // alias production frontend
-      "http://localhost:3000", // for local testing
+      "https://www.startogen.com",
+      "https://hire-ai-frontend-rho.vercel.app",
+      "http://localhost:5173",
     ],
     methods: ["GET", "POST", "PUT", "DELETE"],
-    credentials: true,
+    credentials: true, // ✅ allow cookies to flow across domains
   })
 );
 
+/* ========================
+   ✅ PUBLIC ROUTES
+======================== */
+app.use("/api", authRoutes); // ✅ Correct path
 
-// ==========================
-// ✅ MongoDB Connection
-// ==========================
+/* ========================
+   ✅ PROTECTED ROUTES GROUP
+======================== */
+const protectedRouter = express.Router();
+
+// ✅ Apply auth once — protects everything below
+protectedRouter.use(auth);
+
+// Protected routes
+protectedRouter.use("/users", userRoutes);
+protectedRouter.use("/upload-resume", uploadRoutes);
+protectedRouter.use("/results", resultsRoutes);
+protectedRouter.use("/settings", settingsRoutes);
+
+// ✅ Mount under /api
+app.use("/api", protectedRouter);
+
+/* ========================
+   ✅ MongoDB Connection
+======================== */
 mongoose
   .connect(process.env.MONGO_URI)
   .then(() => console.log("✅ MongoDB Connected"))
   .catch((err) => console.error("❌ DB Error:", err));
 
-// ==========================
-// ✅ Helper: Extract text from PDF safely
-// ==========================
-const extractTextFromPDF = (filePath) => {
-  return new Promise((resolve, reject) => {
-    const pdfParser = new PDFParser();
+/* ========================
+   ✅ Server
+======================== */
+// const PORT = process.env.PORT || 5000;
+// app.listen(PORT, () => {
+//   console.log(`🚀 Server running on port ${PORT}`);
+// });
 
-    pdfParser.on("pdfParser_dataError", (errData) =>
-      reject(errData.parserError)
-    );
-
-    pdfParser.on("pdfParser_dataReady", (pdfData) => {
-      try {
-        const text = pdfData.Pages.map((page) =>
-          page.Texts.map((t) => {
-            try {
-              return decodeURIComponent(t.R[0].T);
-            } catch {
-              return t.R[0].T;
-            }
-          }).join(" ")
-        ).join("\n");
-        resolve(text);
-      } catch (e) {
-        reject(e);
-      }
-    });
-
-    pdfParser.loadPDF(filePath);
-  });
-};
-
-// ==========================
-// ✅ Helper: Analyze Resume with OpenAI
-// ==========================
-async function analyzeResumeWithAI(resumeText, jobDescription) {
-  const prompt = `
-You are an expert technical recruiter and career analyst. Your goal is to evaluate how well a candidate’s resume fits a given job description.
-
-Please analyze the following resume and job description carefully, then produce ONLY a valid JSON response (no markdown, no commentary, no code formatting).  
-
-Your response must strictly follow this structure:
-
-{
-  "matchPercentage": number (0–100),
-  "summary": "A clear 3–5 sentence summary of the candidate’s profile for HRs. Mention key strengths, relevant skills, years of experience, and how well they align with the role.",
-  "requirementsSummary": {
-    "requiredSkills": ["Skill1", "Skill2", "Skill3", ...],
-    "candidateSkills": ["SkillA", "SkillB", "SkillC", ...],
-    "matchingSkills": ["Skill1", "Skill2", ...],
-    "missingSkills": ["Skill3", "Skill4", ...]
-  },
-  "experience": "Describe total years of professional experience and major technical domains (e.g., 3 years in frontend development, 2 years in React).",
-  "recommendation": "A short, direct conclusion for HR: 'Strong match', 'Good potential fit', or 'Needs improvement'."
-}
-
-Rules:
-- Extract both hard and soft skills accurately from the job description and resume.
-- Normalize skills (e.g., 'React.js' and 'React' should be considered the same).
-- Include technical tools (React, Laravel, TypeScript, Git), frameworks, libraries, and relevant soft skills (teamwork, communication).
-- Be factual and concise. Avoid assumptions not supported by the resume.
-
-Now analyze carefully:
-
-Resume:
-${resumeText}
-
-Job Description:
-${jobDescription}
-`;
-
-
-  const response = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-    },
-    body: JSON.stringify({
-      model: "gpt-4o-mini",
-      messages: [
-        { role: "system", content: "You are an expert HR recruiter." },
-        { role: "user", content: prompt },
-      ],
-    }),
-  });
-
-  const data = await response.json();
-  const content = data.choices?.[0]?.message?.content || "";
-  const cleanText = content.replace(/```json|```/g, "").trim();
-  console.log("🔍 AI Raw Response:", cleanText);
-
-  // ==========================
-  // ✅ Try parsing JSON
-  // ==========================
-    let resultJson;
-  try {
-    resultJson = JSON.parse(cleanText);
-  } catch (err) {
-    console.warn("⚠️ JSON parse failed, applying fallback extraction...");
-    const match = cleanText.match(/(\d{1,3})%/);
-    const missingSkillsMatch = cleanText.match(/missingSkills.*?\[(.*?)\]/i);
-    const matchingSkillsMatch = cleanText.match(/matchingSkills.*?\[(.*?)\]/i);
-
-    resultJson = {
-      matchPercentage: match ? Number(match[1]) : "N/A",
-      summary:
-        cleanText.match(/summary":\s*"([^"]+)"/)?.[1] ||
-        "Summary not available.",
-      requirementsSummary: {
-        requiredSkills: [],
-        candidateSkills: [],
-        matchingSkills: matchingSkillsMatch
-          ? matchingSkillsMatch[1]
-              .split(",")
-              .map((s) => s.replace(/["\]]/g, "").trim())
-          : [],
-        missingSkills: missingSkillsMatch
-          ? missingSkillsMatch[1]
-              .split(",")
-              .map((s) => s.replace(/["\]]/g, "").trim())
-          : [],
-      },
-      experience:
-        cleanText.match(/experience":\s*"([^"]+)"/)?.[1] ||
-        "Experience not specified.",
-      recommendation:
-        cleanText.match(/recommendation":\s*"([^"]+)"/)?.[1] ||
-        "Recommendation unavailable.",
-      raw: cleanText,
-    };
-  }
-
-  return resultJson;
-}
-
-// ==========================
-// ✅ ROUTE 1: Analyze via Text Input
-// ==========================
-app.post("/api/analyze", async (req, res) => {
-  try {
-    const { resumeText, jobDescription } = req.body;
-    const result = await analyzeResumeWithAI(resumeText, jobDescription);
-    res.json(result);
-  } catch (err) {
-    console.error("❌ AI Error:", err);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// ==========================
-// ✅ ROUTE 2: Upload File + Analyze
-// ==========================
-const upload = multer({ storage: multer.memoryStorage() });
-
-app.post("/api/upload-resume", upload.single("file"), async (req, res) => {
-  try {
-    if (!req.file) return res.status(400).json({ error: "No file uploaded" });
-
-    const buffer = req.file.buffer;
-    const fileExt = req.file.originalname.split(".").pop().toLowerCase();
-
-    let resumeText = "";
-    if (fileExt === "pdf") {
-      // ✅ Write temporarily to /tmp
-      const tempPath = `/tmp/${Date.now()}.pdf`;
-      fs.writeFileSync(tempPath, buffer);
-      resumeText = await extractTextFromPDF(tempPath);
-      fs.unlinkSync(tempPath);
-    } else if (fileExt === "docx") {
-      const result = await mammoth.extractRawText({ buffer });
-      resumeText = result.value;
-    } else {
-      return res.status(400).json({ error: "Only PDF or DOCX supported" });
-    }
-
-    const result = await analyzeResumeWithAI(resumeText, req.body.jobDescription);
-    res.json(result);
-  } catch (err) {
-    console.error("❌ Upload Error:", err);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// ==========================
-// ✅ ROUTE 3: Save Analysis Result
-// ==========================
-app.post("/api/saveResult", async (req, res) => {
-  try {
-    const {
-      resumeText,
-      jobDescription,
-      matchPercentage,
-      missingSkills,
-      summary,
-    } = req.body;
-
-    const newResult = new AnalysisResult({
-      resumeText,
-      jobDescription,
-      matchPercentage,
-      missingSkills,
-      summary,
-    });
-
-    await newResult.save();
-    res.json({ success: true, message: "Result saved successfully" });
-  } catch (error) {
-    console.error("❌ Save Error:", error);
-    res.status(500).json({ error: "Failed to save result" });
-  }
-});
-
-// ==========================
-// ✅ ROUTE 4: Get All Saved Results
-// ==========================
-app.get("/api/getResults", async (req, res) => {
-  try {
-    const results = await AnalysisResult.find().sort({ createdAt: -1 });
-    res.json(results);
-  } catch (error) {
-    console.error("❌ Fetch Error:", error);
-    console.log(error);
-    res.status(500).json({ error: "Failed to fetch results" });
-  }
-});
-
-// ==========================
-// ✅ Export (for Vercel)
-// ==========================
 export default app;
