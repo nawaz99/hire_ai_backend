@@ -19,7 +19,7 @@ router.post("/", upload.single("file"), async (req, res) => {
 
         let resumeText = "";
         if (fileExt === "pdf") {
-            const tempPath = `uploads/${Date.now()}.pdf`;
+            const tempPath = `temp/${Date.now()}.pdf`;
             fs.writeFileSync(tempPath, buffer);
             resumeText = await extractTextFromPDF(tempPath);
             fs.unlinkSync(tempPath);
