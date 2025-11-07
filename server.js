@@ -16,8 +16,6 @@ import settingsRoutes from "./routes/settings.js";
 
 dotenv.config();
 const app = express();
-app.use(express.json());
-app.use(cookieParser()); // ✅ Required for HTTP-only cookie auth
 
 // ✅ CORS setup (must allow credentials)
 app.use(
@@ -31,6 +29,12 @@ app.use(
     credentials: true, // ✅ allow cookies to flow across domains
   })
 );
+
+
+app.use(express.json());
+app.use(cookieParser()); // ✅ Required for HTTP-only cookie auth
+
+
 
 /* ========================
    ✅ PUBLIC ROUTES
