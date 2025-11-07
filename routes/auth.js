@@ -34,11 +34,13 @@ router.post("/register", async (req, res) => {
 
         // ✅ Store JWT in secure HTTP-only cookie
         res.cookie("token", token, {
-            httpOnly: true,       // ✅ not accessible by JS (prevents XSS)
-            secure: process.env.NODE_ENV === "production", // ✅ https in prod
-            sameSite: "strict",
-            maxAge: 24 * 60 * 60 * 1000 // 1 day
+            httpOnly: true,
+            secure: process.env.NODE_ENV === "production",
+            sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+            path: "/",
+            maxAge: 24 * 60 * 60 * 1000
         });
+
 
         // ✅ Send only user data to frontend (NO token)
         res.json({
@@ -73,11 +75,13 @@ router.post("/login", async (req, res) => {
 
         // ✅ Store JWT in secure HTTP-only cookie
         res.cookie("token", token, {
-            httpOnly: true,       // ✅ not accessible by JS (prevents XSS)
-            secure: process.env.NODE_ENV === "production", // ✅ https in prod
-            sameSite: "strict",
-            maxAge: 24 * 60 * 60 * 1000 // 1 day
+            httpOnly: true,
+            secure: process.env.NODE_ENV === "production",
+            sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+            path: "/",
+            maxAge: 24 * 60 * 60 * 1000
         });
+
 
         // ✅ Send only user data to frontend (NO token)
         res.json({

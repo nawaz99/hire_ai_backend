@@ -31,8 +31,8 @@ app.use(
 );
 
 
-app.use(express.json());
 app.use(cookieParser()); // ✅ Required for HTTP-only cookie auth
+app.use(express.json());
 
 
 
