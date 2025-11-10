@@ -62,7 +62,9 @@ app.use("/api", protectedRouter);
    ✅ MongoDB Connection
 ======================== */
 mongoose
-  .connect(process.env.MONGO_URI)
+  .connect(process.env.MONGO_URI, {
+    dbName: "resumeAnalyzer",
+  })
   .then(() => console.log("✅ MongoDB Connected"))
   .catch((err) => console.error("❌ DB Error:", err));
 
