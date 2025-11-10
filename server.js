@@ -21,8 +21,7 @@ const app = express();
 app.use(
   cors({
     origin: [
-      "https://www.startogen.com",
-      "https://hire-ai-frontend-rho.vercel.app",
+      "https://resumeanalyzer.startogen.com",
       "http://localhost:5173",
     ],
     methods: ["GET", "POST", "PUT", "DELETE"],
